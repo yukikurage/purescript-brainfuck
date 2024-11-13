@@ -1,0 +1,16 @@
+{
+	"compilerOptions": {
+		"module": "ES6",
+		"target": "ESNEXT",
+		"lib": [
+			"es6"
+		],
+		"rootDir": "src",
+		"strict": true,
+    "moduleResolution": "node",
+	},
+	"exclude": [
+		"node_modules",
+		".vscode-test"
+	]
+}
