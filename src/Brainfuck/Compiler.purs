@@ -124,5 +124,6 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
   addFunctionExport mod "main" mainFunction
 
   validate mod
+  optimize mod
 
   emitBinary mod
