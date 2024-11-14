@@ -8,6 +8,8 @@ export const setMemory =
   (module: binaryen.Module) => (initial: number) => (maximum: number) => () =>
     module.setMemory(initial, maximum);
 
+export const nopExpr = (module: binaryen.Module) => module.nop();
+
 export const constExpr = (module: binaryen.Module) => (value: number) =>
   module.i32.const(value);
 
@@ -92,12 +94,11 @@ export const ifExpr =
   (module: binaryen.Module) =>
   (condition: binaryen.ExpressionRef) =>
   (ifTrue: binaryen.ExpressionRef) =>
-  (ifFalse: binaryen.ExpressionRef) =>
-    module.if(condition, ifTrue, ifFalse);
+    module.if(condition, ifTrue);
 
 export const blockExpr =
   (module: binaryen.Module) => (children: binaryen.ExpressionRef[]) =>
-    module.block(null, children);
+    module.block("", children);
 
 export const loopExpr =
   (module: binaryen.Module) =>
@@ -155,6 +156,10 @@ export const addFunction =
 
 export const optimize = (module: binaryen.Module) => () => module.optimize();
 
+export const optimizeFunction =
+  (module: binaryen.Module) => (name: string) => () =>
+    module.optimizeFunction(name);
+
 export const validate = (module: binaryen.Module) => () => module.validate();
 
 export const emitBinary = (module: binaryen.Module) => () =>
@@ -165,3 +170,10 @@ export const emitText = (module: binaryen.Module) => () => module.emitText();
 export const setOptimizeLevel =
   (module: binaryen.Module) => (level: number) => () =>
     setOptimizeLevel(module)(level);
+
+export const setShrinkLevel =
+  (module: binaryen.Module) => (level: number) => () =>
+    setShrinkLevel(module)(level);
+
+export const emitStackIR = (module: binaryen.Module) => () =>
+  module.emitStackIR();

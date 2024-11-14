@@ -2,6 +2,7 @@
 import binaryen from "binaryen";
 export const newModule = () => new binaryen.Module();
 export const setMemory = (module) => (initial) => (maximum) => () => module.setMemory(initial, maximum);
+export const nopExpr = (module) => module.nop();
 export const constExpr = (module) => (value) => module.i32.const(value);
 export const localGet = (module) => (index) => module.local.get(index, binaryen.i32);
 export const localSet = (module) => (index) => (value) => module.local.set(index, value);
@@ -30,8 +31,8 @@ export const storeExpr = (module) => (cellSize) => (ptr) => (offset) => (value) 
 export const callExpr = (module) => (name) => (params) => (resultType) => module.call(name, params, resultType);
 export const i32Type = binaryen.i32;
 export const noneType = binaryen.none;
-export const ifExpr = (module) => (condition) => (ifTrue) => (ifFalse) => module.if(condition, ifTrue, ifFalse);
-export const blockExpr = (module) => (children) => module.block(null, children);
+export const ifExpr = (module) => (condition) => (ifTrue) => module.if(condition, ifTrue);
+export const blockExpr = (module) => (children) => module.block("", children);
 export const loopExpr = (module) => (label) => (body) => module.loop(label, body);
 export const brExpr = (module) => (label) => module.br(label);
 export const returnExpr = (module) => module.return();
@@ -45,7 +46,10 @@ export const addFunctionExport = (module) => (internalName) => (externalName) =>
 export const addFunction = (module) => (name) => (params) => (results) => (locals) => (body) => () => module.addFunction(name, params, results, locals, body);
 // Optimizations & Compilation
 export const optimize = (module) => () => module.optimize();
+export const optimizeFunction = (module) => (name) => () => module.optimizeFunction(name);
 export const validate = (module) => () => module.validate();
 export const emitBinary = (module) => () => module.emitBinary();
 export const emitText = (module) => () => module.emitText();
 export const setOptimizeLevel = (module) => (level) => () => setOptimizeLevel(module)(level);
+export const setShrinkLevel = (module) => (level) => () => setShrinkLevel(module)(level);
+export const emitStackIR = (module) => () => module.emitStackIR();

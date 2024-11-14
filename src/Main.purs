@@ -4,11 +4,13 @@ import Prelude
 
 import Brainfuck.Binaryen (WasmCellSize, cell0)
 import Brainfuck.Compiler (compile)
+import Brainfuck.IR (showIR, viewIR)
 import Brainfuck.Parser (parse)
 import Brainfuck.Runtime (runBinary)
 import Brainfuck.Transpiler (transpile)
 import Data.Array (index)
 import Data.DateTime.Instant (unInstant)
+import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (CodePoint, codePointAt, codePointFromChar, fromCodePointArray)
 import Effect (Effect)
@@ -31,12 +33,12 @@ config
      , cellCount :: Int
      }
 config =
-  { importModule: "brainfuck"
+  { importModule: "env"
   , inputFunction: "input"
   , outputFunction: "output"
   , mainFunction: "main"
   , cellSize: cell0
-  , cellCount: 1000
+  , cellCount: 10000
   }
 
 main :: Effect Unit
@@ -60,9 +62,11 @@ main = launchAff_ do
       log $ "Transpiling..."
       Milliseconds beforeTranspile <- unInstant <$> liftEffect now
       let
-        ir = transpile config.cellCount ast
+        ir = transpile 1000 config.cellCount ast
       Milliseconds afterTranspile <- unInstant <$> liftEffect now
       log "Transpiled"
+
+      log $ viewIR ir
 
       log "Compiling..."
       Milliseconds beforeCompile <- unInstant <$> liftEffect now

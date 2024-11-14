@@ -2,12 +2,13 @@ module Brainfuck.Compiler where
 
 import Prelude
 
-import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, blockExpr, brExpr, callExpr, constExpr, divExpr, emitBinary, getAlign, i32Type, ifExpr, loadExpr, localGet, localSet, loopExpr, mulExpr, newModule, noneType, optimize, returnExpr, setMemory, setOptimizeLevel, storeExpr, subExpr, validate)
+import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, blockExpr, brExpr, callExpr, constExpr, divExpr, emitBinary, emitStackIR, emitText, i32Type, ifExpr, loadExpr, localGet, localSet, loopExpr, mulExpr, newModule, noneType, optimize, optimizeFunction, returnExpr, setMemory, setShrinkLevel, storeExpr, subExpr, validate)
 import Brainfuck.IR (IR, LeftValue(..), RightValue(..), Statement(..))
 import Control.Monad.State (State, evalState, get, modify_)
 import Data.List (List)
 import Data.List as List
 import Effect (Effect)
+import Effect.Class.Console (log)
 
 compile
   :: { cellSize :: WasmCellSize
@@ -39,14 +40,14 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
     divE :: WasmExpr -> WasmExpr -> WasmExpr
     divE = divExpr mod
 
-    alignE :: WasmExpr
-    alignE = constE $ getAlign cellSize
-
     getPointerE :: WasmExpr
     getPointerE = localGet mod 0
 
+    -- movePointerE :: WasmExpr -> WasmExpr
+    -- movePointerE offset = localSet mod 0 (addE (localGet mod 0) (mulE offset alignE))
+
     movePointerE :: WasmExpr -> WasmExpr
-    movePointerE offset = localSet mod 0 (addE (localGet mod 0) (mulE offset alignE))
+    movePointerE offset = localSet mod 0 (addE (localGet mod 0) offset)
 
     loadMemoryE :: Int -> WasmExpr
     loadMemoryE offset
@@ -70,7 +71,7 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
     blockE :: List WasmExpr -> WasmExpr
     blockE exprs = blockExpr mod $ List.toUnfoldable exprs
 
-    ifE :: WasmExpr -> WasmExpr -> WasmExpr -> WasmExpr
+    ifE :: WasmExpr -> WasmExpr -> WasmExpr
     ifE = ifExpr mod
 
     brE :: String -> WasmExpr
@@ -102,12 +103,14 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
           Loop body -> do
             label' <- mkLabel
             bodyE <- go label' body
-            pure $ loopE label' (blockE bodyE)
-          Break -> pure $ brE label
-          If cond tExp fExp -> do
+            pure $ loopE label'
+              ( ifE
+                  (loadMemoryE 0)
+                  (blockE (bodyE <> List.singleton (brE label')))
+              )
+          If cond tExp -> do
             tExp' <- go label tExp
-            fExp' <- go label fExp
-            pure $ ifE (compileRightValue cond) (blockE tExp') (blockE fExp')
+            pure $ ifE (compileRightValue cond) (blockE tExp')
           Output right -> pure $ outputE (compileRightValue right)
           MovePointer right -> pure $ movePointerE (compileRightValue right)
         t <- go label ir'
@@ -115,15 +118,16 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
 
   let exprs = evalState (go "_" ir) 0
 
-  addFunctionImport mod "input" importModule inputFunction noneType i32Type
-  addFunctionImport mod "output" importModule outputFunction i32Type noneType
   addFunction mod "main" noneType
     noneType
     [ i32Type {- Pointer -} ]
     (blockE (List.singleton (localSet mod 0 (constE 128)) <> exprs <> List.singleton (returnExpr mod)))
+
+  addFunctionImport mod "input" importModule inputFunction noneType i32Type
+  addFunctionImport mod "output" importModule outputFunction i32Type noneType
+
   addFunctionExport mod "main" mainFunction
 
   validate mod
-  optimize mod
 
   emitBinary mod

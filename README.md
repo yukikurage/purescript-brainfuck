@@ -1,7 +1,9 @@
 # purescript-brainfuck
 
 ```
-npx spago run -- "./examples/hello.bf"
+npm ci
+npm run bundle
+node index.js "./examples/hello.bf"
 ```
 
 ## Implementation
