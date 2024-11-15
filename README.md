@@ -12,6 +12,13 @@ Raw Code -Parser-> AST -Transpiler-> IR -Compiler-> WASM Binary => Runtime(wasme
 
 ## Examples
 
+bfbf.bf
+
+```
+node index.js ./examples/bfbf.bf "++++++++++[>+>+++>+++++++>++++++++++<<<<-]>>>++.>+.+++++++..+++.<<++.>+++++++++++++++.>.+++.
+------.--------.<<+.<.!"
+```
+
 Examples are collected via
 
 - https://copy.sh/brainfuck/

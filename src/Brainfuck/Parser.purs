@@ -5,13 +5,15 @@ import Prelude
 import Brainfuck.AST (AST)
 import Brainfuck.AST as AST
 import Control.Monad.RWS (modify_)
+import Control.Monad.Rec.Class (Step, tailRecM)
+import Control.Monad.Rec.Class as R
 import Control.Monad.State (State, evalState, get)
-import Data.List ((:))
+import Data.List ((:), snoc)
 import Data.Maybe (Maybe(..))
 import Data.String.CodeUnits (charAt)
 
 parse :: String -> AST
-parse code = evalState go 0
+parse code = evalState (go mempty) 0
   where
   popChar :: State Int (Maybe Char)
   popChar = do
@@ -19,27 +21,27 @@ parse code = evalState go 0
     modify_ (_ + 1)
     pure (charAt idx code)
 
-  go :: State Int AST
-  go = do
+  go :: AST -> State Int AST
+  go = tailRecM \acc -> do
     char <- popChar
 
     case char of
-      Just '+' -> (AST.Increment : _) <$> go
-      Just '-' -> (AST.Decrement : _) <$> go
-      Just '>' -> (AST.MoveRight : _) <$> go
-      Just '<' -> (AST.MoveLeft : _) <$> go
-      Just '.' -> (AST.Output : _) <$> go
-      Just ',' -> (AST.Input : _) <$> go
+      Just '+' -> pure $ R.Loop (acc `snoc` AST.Increment)
+      Just '-' -> pure $ R.Loop (acc `snoc` AST.Decrement)
+      Just '>' -> pure $ R.Loop (acc `snoc` AST.MoveRight)
+      Just '<' -> pure $ R.Loop (acc `snoc` AST.MoveLeft)
+      Just '.' -> pure $ R.Loop (acc `snoc` AST.Output)
+      Just ',' -> pure $ R.Loop (acc `snoc` AST.Input)
       Just '$' -> do
         char' <- popChar
         case char' of
           Just '[' -> do
-            body <- go
-            (AST.Loop false body : _) <$> go
-          _ -> go
+            body <- go mempty
+            pure $ R.Loop (acc `snoc` AST.Loop true body)
+          _ -> pure $ R.Loop acc
       Just '[' -> do
-        body <- go
-        (AST.Loop true body : _) <$> go
-      Just ']' -> pure mempty
-      Just _ -> go
-      Nothing -> pure mempty
+        body <- go mempty
+        pure $ R.Loop (acc `snoc` AST.Loop false body)
+      Just ']' -> pure $ R.Done acc
+      Just _ -> pure $ R.Loop acc
+      Nothing -> pure $ R.Done acc

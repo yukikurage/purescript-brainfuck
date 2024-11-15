@@ -23,6 +23,7 @@ import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readTextFile)
 import Node.Process (argv, stdout)
 import Node.Stream (writeString)
+import Unsafe.Coerce (unsafeCoerce)
 
 config
   :: { cellSize :: WasmCellSize
@@ -93,7 +94,7 @@ main = launchAff_ do
             Just c -> do
               liftEffect $ modify_ (_ + 1) inputIndex
               pure c
-            Nothing -> pure $ codePointFromChar '_'
+            Nothing -> pure $ unsafeCoerce 0
 
         outputFunc :: CodePoint -> Effect Unit
         outputFunc c = void $ writeString stdout UTF8 $ fromCodePointArray [ c ]

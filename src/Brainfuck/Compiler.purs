@@ -232,6 +232,4 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
   validate mod
   optimize mod
 
-  -- log =<< emitText mod
-
   emitBinary mod
