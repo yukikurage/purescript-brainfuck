@@ -5,18 +5,9 @@ import Prelude
 import Data.Array (concatMap, fromFoldable, replicate)
 import Data.Generic.Rep (class Generic)
 import Data.List (List, fold)
-import Data.Show.Generic (genericShow)
 import Data.String as String
 
 type Offset = Int
-
-data LeftValue = ToMemory Offset
-
-derive instance Generic LeftValue _
-
-instance Show LeftValue where
-  show = case _ of
-    ToMemory offset -> "[" <> show offset <> "]"
 
 data RightValue
   = FromMemory Offset
@@ -25,7 +16,6 @@ data RightValue
   | Sub RightValue RightValue
   | Mul RightValue RightValue
   | Div RightValue RightValue
-  | Input
 
 derive instance Generic RightValue _
 
@@ -37,14 +27,14 @@ instance Show RightValue where
     Sub left right -> "(" <> show left <> " - " <> show right <> ")"
     Mul left right -> "(" <> show left <> " * " <> show right <> ")"
     Div left right -> "(" <> show left <> " / " <> show right <> ")"
-    Input -> "input"
 
 data Statement
-  = Assignment LeftValue RightValue
+  = Assignment Offset RightValue
   | Loop IR -- Loop until the break called
-  | If RightValue IR -- If the value is not zero, execute the first IR, otherwise execute the second IR
+  | If RightValue IR -- If the value is not zero, execute the IR
   | Output RightValue
   | MovePointer RightValue
+  | Input Offset
 
 derive instance Generic Statement _
 
@@ -55,6 +45,7 @@ showStatement = case _ of
   If cond tExp -> [ "if " <> show cond <> ":" ] <> showIR 2 tExp
   Output right -> [ "output " <> show right ]
   MovePointer right -> [ "move " <> show right ]
+  Input offset -> [ "input " <> show offset ]
 
 type IR = List Statement
 

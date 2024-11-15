@@ -2,13 +2,12 @@ module Brainfuck.Compiler where
 
 import Prelude
 
-import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, blockExpr, brExpr, callExpr, constExpr, divExpr, emitBinary, emitStackIR, emitText, i32Type, ifExpr, loadExpr, localGet, localSet, loopExpr, mulExpr, newModule, noneType, optimize, optimizeFunction, returnExpr, setMemory, setShrinkLevel, storeExpr, subExpr, validate)
-import Brainfuck.IR (IR, LeftValue(..), RightValue(..), Statement(..))
+import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, blockExpr, brExpr, callExpr, constExpr, divExpr, emitBinary, i32Type, ifExpr, loadExpr, localGet, localSet, loopExpr, mulExpr, newModule, noneType, returnExpr, setMemory, setOptimizeLevel, storeExpr, subExpr, validate)
+import Brainfuck.IR (IR, RightValue(..), Statement(..))
 import Control.Monad.State (State, evalState, get, modify_)
 import Data.List (List)
 import Data.List as List
 import Effect (Effect)
-import Effect.Class.Console (log)
 
 compile
   :: { cellSize :: WasmCellSize
@@ -24,7 +23,6 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
   setMemory mod 2 2
 
   let
-
     constE :: Int -> WasmExpr
     constE = constExpr mod
 
@@ -91,15 +89,13 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
       Sub left right -> subE (compileRightValue left) (compileRightValue right)
       Mul left right -> mulE (compileRightValue left) (compileRightValue right)
       Div left right -> divE (compileRightValue left) (compileRightValue right)
-      Input -> inputE
 
     go :: String -> IR -> State Int (List WasmExpr)
     go label = case _ of
       List.Nil -> pure mempty
       st List.: ir' -> do
         h <- case st of
-          Assignment left right -> pure case left of
-            ToMemory offset -> storeMemoryE offset (compileRightValue right)
+          Assignment offset right -> pure $ storeMemoryE offset (compileRightValue right)
           Loop body -> do
             label' <- mkLabel
             bodyE <- go label' body
@@ -113,6 +109,7 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
             pure $ ifE (compileRightValue cond) (blockE tExp')
           Output right -> pure $ outputE (compileRightValue right)
           MovePointer right -> pure $ movePointerE (compileRightValue right)
+          Input offset -> pure $ storeMemoryE offset inputE
         t <- go label ir'
         pure $ h List.: t
 
@@ -126,8 +123,11 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
   addFunctionImport mod "input" importModule inputFunction noneType i32Type
   addFunctionImport mod "output" importModule outputFunction i32Type noneType
 
+  setOptimizeLevel mod 0
+
   addFunctionExport mod "main" mainFunction
 
   validate mod
+  -- optimize mod
 
   emitBinary mod

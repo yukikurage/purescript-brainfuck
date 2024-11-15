@@ -62,7 +62,7 @@ main = launchAff_ do
       log $ "Transpiling..."
       Milliseconds beforeTranspile <- unInstant <$> liftEffect now
       let
-        ir = transpile 1000 config.cellCount ast
+        ir = transpile {- 10000 config.cellCount -}  ast
       Milliseconds afterTranspile <- unInstant <$> liftEffect now
       log "Transpiled"
 
