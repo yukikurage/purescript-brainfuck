@@ -73,11 +73,14 @@ main = launchAff_ do
       Milliseconds afterOptimize <- unInstant <$> liftEffect now
       log "Optimizing"
 
-      log $ viewIR ir'
+      -- log $ viewIR ir'
 
       log "Compiling..."
       Milliseconds beforeCompile <- unInstant <$> liftEffect now
-      binary <- liftEffect $ compile { cellSize: config.cellSize, importModule: config.importModule, inputFunction: config.inputFunction, outputFunction: config.outputFunction, mainFunction: config.mainFunction } ir'
+      binary <- liftEffect $
+        compile
+          { cellSize: config.cellSize, importModule: config.importModule, inputFunction: config.inputFunction, outputFunction: config.outputFunction, mainFunction: config.mainFunction }
+          ir'
       Milliseconds afterCompile <- unInstant <$> liftEffect now
       log "Compiled"
 
@@ -96,8 +99,7 @@ main = launchAff_ do
         outputFunc c = void $ writeString stdout UTF8 $ fromCodePointArray [ c ]
 
       log "Running..."
-      log "---------"
-      log ""
+      log "== OUTPUT =="
       Milliseconds beforeRun <- unInstant <$> liftEffect now
       liftEffect $ runBinary
         { importModule: config.importModule, inputFunction: config.inputFunction, outputFunction: config.outputFunction, mainFunction: config.mainFunction }
@@ -106,7 +108,7 @@ main = launchAff_ do
         binary
       Milliseconds afterRun <- unInstant <$> liftEffect now
       log ""
-      log "---------"
+      log "============"
 
       log $ "Parse time: " <> show (afterParse - beforeParse)
       log $ "Transpile time: " <> show (afterTranspile - beforeTranspile)

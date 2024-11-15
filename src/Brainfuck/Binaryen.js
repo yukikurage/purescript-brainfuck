@@ -7,6 +7,7 @@ export const nopExpr = (module) => module.nop();
 export const constExpr = (module) => (value) => module.i32.const(value);
 export const localGet = (module) => (index) => module.local.get(index, binaryen.i32);
 export const localSet = (module) => (index) => (value) => module.local.set(index, value);
+export const localTee = (module) => (index) => (value) => module.local.tee(index, value, binaryen.i32);
 export const addExpr = (module) => (left) => (right) => module.i32.add(left, right);
 export const subExpr = (module) => (left) => (right) => module.i32.sub(left, right);
 export const mulExpr = (module) => (left) => (right) => module.i32.mul(left, right);

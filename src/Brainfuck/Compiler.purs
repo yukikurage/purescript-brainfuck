@@ -2,13 +2,90 @@ module Brainfuck.Compiler where
 
 import Prelude
 
-import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, addMemoryExport, blockExpr, brExpr, callExpr, constExpr, divExpr, emitBinary, emitText, i32Type, ifExpr, loadExpr, localGet, localSet, loopExpr, mulExpr, newModule, noneType, optimize, returnExpr, setMemory, setOptimizeLevel, storeExpr, subExpr, validate)
-import Brainfuck.IR (IR, RightValue(..), Statement(..))
+import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, addMemoryExport, blockExpr, brExpr, callExpr, constExpr, divExpr, emitBinary, emitText, i32Type, ifExpr, loadExpr, localGet, localSet, localTee, loopExpr, mulExpr, newModule, noneType, nopExpr, optimize, returnExpr, setMemory, setOptimizeLevel, storeExpr, subExpr, validate)
+import Brainfuck.IR (IR, Offset, RightValue(..), Statement(..))
 import Control.Monad.State (State, evalState, get, modify_)
-import Data.List (List)
+import Data.List (List, (:))
 import Data.List as List
+import Data.Maybe (Maybe(..))
+import Data.Tuple.Nested ((/\))
+import Debug (trace)
 import Effect (Effect)
 import Effect.Console (log)
+
+-- | Compile 最適化用
+-- | pointer set の後に pointer get をする時、 tee を呼ぶ
+data RightValueT
+  = FromMemoryT Offset
+  | ConstantT Int
+  | AddT RightValueT RightValueT
+  | SubT RightValueT RightValueT
+  | MulT RightValueT RightValueT
+  | DivT RightValueT RightValueT
+  | FromMemoryTee
+      RightValueT -- Pointer をどれだけ動かすかが埋め込まれる
+      Offset
+
+data StatementT
+  -- Assignment n, Addition n, Substraction n の RightValue には FromMemory n が入っていないことが保証されていなければならない
+  -- これによって合成が容易になる
+  -- 例えば Assignment を 2 回行うときは後者を残せばよい
+  -- また一番外側はできる限り (Constant n), (Constant n) +, (Constant n) * のどれかになるように作る
+  = AssignmentT Offset RightValueT
+  | AssignmentTee RightValueT -- ポインタの差分
+
+      Offset
+      RightValueT
+  | AdditionT Offset RightValueT
+  | AdditionTee RightValueT -- ポインタの差分
+
+      Offset
+      RightValueT
+  | LoopT Boolean IRT -- Loop until the break called
+  | IfT RightValueT IRT -- If the value is not zero, execute the IR
+  | OutputT RightValueT
+  | MovePointerT RightValueT
+  | InputT Offset
+
+type IRT = List StatementT
+
+rvToRvT :: RightValue -> RightValueT
+rvToRvT = case _ of
+  FromMemory offset -> FromMemoryT offset
+  Constant value -> ConstantT value
+  Add left right -> AddT (rvToRvT left) (rvToRvT right)
+  Sub left right -> SubT (rvToRvT left) (rvToRvT right)
+  Mul left right -> MulT (rvToRvT left) (rvToRvT right)
+  Div left right -> DivT (rvToRvT left) (rvToRvT right)
+
+irToIrT :: IR -> IRT
+irToIrT = map case _ of
+  Assignment offset right -> AssignmentT offset (rvToRvT right)
+  Addition offset right -> AdditionT offset (rvToRvT right)
+  Loop b ir -> LoopT b (irToIrT ir)
+  If cond tExp -> IfT (rvToRvT cond) (irToIrT tExp)
+  Output right -> OutputT (rvToRvT right)
+  MovePointer right -> MovePointerT (rvToRvT right)
+  Input offset -> InputT offset
+
+-- | MovePointerT r に次いで Statement が来た時、その Statement が Stack を使うように変形
+modifyTee :: RightValueT -> StatementT -> Maybe StatementT
+modifyTee diff = case _ of
+  AssignmentT offset right -> Just $ AssignmentTee diff offset right
+  AdditionT offset right -> Just $ AdditionTee diff offset right
+  IfT (FromMemoryT offset) ir -> Just $ IfT (FromMemoryTee diff offset) ir
+  OutputT (FromMemoryT offset) -> Just $ OutputT (FromMemoryTee diff offset)
+  _ -> Nothing
+
+optTee :: IRT -> IRT
+optTee = case _ of
+  (MovePointerT diff) : st2 : sts -> case modifyTee diff st2 of
+    Just st2' -> st2' : optTee sts
+    Nothing -> MovePointerT diff : (optTee (st2 : sts))
+  LoopT b ir : sts -> LoopT b (optTee ir) : (optTee sts)
+  IfT cond ir : sts -> IfT cond (optTee ir) : (optTee sts)
+  st : sts -> st : (optTee sts)
+  List.Nil -> List.Nil
 
 compile
   :: { cellSize :: WasmCellSize
@@ -25,6 +102,9 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
   addMemoryExport mod "memory"
 
   let
+    nopE :: Unit -> WasmExpr
+    nopE _ = nopExpr mod
+
     constE :: Int -> WasmExpr
     constE = constExpr mod
 
@@ -40,8 +120,11 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
     divE :: WasmExpr -> WasmExpr -> WasmExpr
     divE = divExpr mod
 
-    getPointerE :: WasmExpr
-    getPointerE = localGet mod 0
+    getPointerE :: Unit -> WasmExpr
+    getPointerE _ = localGet mod 0
+
+    teePointerE :: WasmExpr -> WasmExpr
+    teePointerE = localTee mod 0
 
     -- movePointerE :: WasmExpr -> WasmExpr
     -- movePointerE offset = localSet mod 0 (addE (localGet mod 0) (mulE offset alignE))
@@ -51,19 +134,31 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
 
     loadMemoryE :: Int -> WasmExpr
     loadMemoryE offset
-      | offset >= (-64) = loadExpr mod cellSize getPointerE (offset + 64)
-      | otherwise = loadExpr mod cellSize (addE getPointerE (constE (offset + 64))) 0
+      | offset >= 0 = loadExpr mod cellSize (getPointerE unit) offset
+      | otherwise = loadExpr mod cellSize (addE (getPointerE unit) (constE offset)) 0
+
+    -- | Stack に既に積まれているので getPointer をする必要がない
+    loadMemoryTeeE :: WasmExpr -> Int -> WasmExpr
+    loadMemoryTeeE diff offset
+      | offset >= 0 = loadExpr mod cellSize (teePointerE (addE (localGet mod 0) diff)) offset
+      | otherwise = loadExpr mod cellSize (addE (teePointerE (addE (localGet mod 0) diff)) (constE 64)) 0
 
     storeMemoryE :: Int -> WasmExpr -> WasmExpr
     storeMemoryE offset value
-      | offset >= (-64) = storeExpr mod cellSize getPointerE (offset + 64) value
-      | otherwise = storeExpr mod cellSize (addE getPointerE (constE (offset + 64))) 0 value
+      | offset >= 0 = storeExpr mod cellSize (getPointerE unit) offset value
+      | otherwise = storeExpr mod cellSize (addE (getPointerE unit) (constE offset)) 0 value
+
+    -- | Stack に既に積まれているので getPointer をする必要がない
+    storeMemoryTeeE :: WasmExpr -> Int -> WasmExpr -> WasmExpr
+    storeMemoryTeeE diff offset value
+      | offset >= 0 = storeExpr mod cellSize (teePointerE (addE (localGet mod 0) diff)) offset value
+      | otherwise = storeExpr mod cellSize (addE (teePointerE (addE (localGet mod 0) diff)) (constE offset)) 0 value
 
     outputE :: WasmExpr -> WasmExpr
     outputE expr = callExpr mod outputFunction [ expr ] noneType
 
-    inputE :: WasmExpr
-    inputE = callExpr mod inputFunction [] i32Type
+    inputE :: Unit -> WasmExpr
+    inputE _ = callExpr mod inputFunction [ constE 0 ] i32Type
 
     loopE :: String -> WasmExpr -> WasmExpr
     loopE label body = loopExpr mod label body
@@ -83,24 +178,28 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
       modify_ (_ + 1)
       pure $ "label" <> show idx
 
-    compileRightValue :: RightValue -> WasmExpr
+    compileRightValue :: RightValueT -> WasmExpr
     compileRightValue = case _ of
-      FromMemory offset -> loadMemoryE offset
-      Constant value -> constE value
-      Add left right -> addE (compileRightValue left) (compileRightValue right)
-      Sub left right -> subE (compileRightValue left) (compileRightValue right)
-      Mul left right -> mulE (compileRightValue left) (compileRightValue right)
-      Div left right -> divE (compileRightValue left) (compileRightValue right)
+      FromMemoryT offset -> loadMemoryE offset
+      ConstantT value -> constE value
+      AddT left right -> addE (compileRightValue left) (compileRightValue right)
+      SubT left right -> subE (compileRightValue left) (compileRightValue right)
+      MulT left right -> mulE (compileRightValue left) (compileRightValue right)
+      DivT left right -> divE (compileRightValue left) (compileRightValue right)
+      FromMemoryTee diff offset -> loadMemoryTeeE (compileRightValue diff) offset
 
-    go :: String -> IR -> State Int (List WasmExpr)
+    go :: String -> IRT -> State Int (List WasmExpr)
     go label = case _ of
       List.Nil -> pure mempty
       st List.: ir' -> do
         h <- case st of
-          Addition offset (Mul (Constant (-1)) right) -> pure $ storeMemoryE offset (subE (loadMemoryE offset) (compileRightValue right))
-          Addition offset right -> pure $ storeMemoryE offset (addE (loadMemoryE offset) (compileRightValue right))
-          Assignment offset right -> pure $ storeMemoryE offset (compileRightValue right)
-          Loop _ body -> do
+          AdditionT offset (MulT (ConstantT (-1)) right) -> pure $ storeMemoryE offset (subE (loadMemoryE offset) (compileRightValue right))
+          AdditionTee diff offset (MulT (ConstantT (-1)) right) -> pure $ storeMemoryTeeE (compileRightValue diff) offset (subE (loadMemoryE offset) (compileRightValue right))
+          AdditionT offset right -> pure $ storeMemoryE offset (addE (loadMemoryE offset) (compileRightValue right))
+          AdditionTee diff offset right -> pure $ storeMemoryTeeE (compileRightValue diff) offset (addE (loadMemoryE offset) (compileRightValue right))
+          AssignmentT offset right -> pure $ storeMemoryE offset (compileRightValue right)
+          AssignmentTee diff offset right -> pure $ storeMemoryTeeE (compileRightValue diff) offset (compileRightValue right)
+          LoopT _ body -> do
             label' <- mkLabel
             bodyE <- go label' body
             pure $ loopE label'
@@ -108,16 +207,16 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
                   (loadMemoryE 0)
                   (blockE (bodyE <> List.singleton (brE label')))
               )
-          If cond tExp -> do
+          IfT cond tExp -> do
             tExp' <- go label tExp
             pure $ ifE (compileRightValue cond) (blockE tExp')
-          Output right -> pure $ outputE (compileRightValue right)
-          MovePointer right -> pure $ movePointerE (compileRightValue right)
-          Input offset -> pure $ storeMemoryE offset inputE
+          OutputT right -> pure $ outputE (compileRightValue right)
+          MovePointerT right -> pure $ movePointerE (compileRightValue right)
+          InputT offset -> pure $ storeMemoryE offset (inputE unit)
         t <- go label ir'
         pure $ h List.: t
 
-  let exprs = evalState (go "label" ir) 0
+  let exprs = evalState (go "label" (optTee $ irToIrT ir)) 0
 
   addFunctionImport mod "output" importModule outputFunction i32Type noneType
   addFunctionImport mod "input" importModule inputFunction i32Type i32Type
@@ -126,13 +225,13 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
     noneType
     noneType
     [ i32Type {- Pointer -} ]
-    (blockE (List.singleton (localSet mod 0 (constE 0)) <> exprs <> List.singleton (returnExpr mod)))
+    (blockE (List.singleton (localSet mod 0 (constE 1024)) <> exprs <> List.singleton (returnExpr mod)))
 
   addFunctionExport mod "main" mainFunction
 
   validate mod
-  -- optimize mod
+  optimize mod
 
-  log =<< emitText mod
+  -- log =<< emitText mod
 
   emitBinary mod

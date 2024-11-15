@@ -18,6 +18,7 @@ foreign import nopExpr :: WasmModule -> WasmExpr
 
 foreign import localGet :: WasmModule -> Int -> WasmExpr
 foreign import localSet :: WasmModule -> Int -> WasmExpr -> WasmExpr
+foreign import localTee :: WasmModule -> Int -> WasmExpr -> WasmExpr
 
 foreign import constExpr :: WasmModule -> Int -> WasmExpr
 foreign import addExpr :: WasmModule -> WasmExpr -> WasmExpr -> WasmExpr

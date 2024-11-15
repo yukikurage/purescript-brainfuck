@@ -26,6 +26,12 @@ export const localSet =
   (value: binaryen.ExpressionRef) =>
     module.local.set(index, value);
 
+export const localTee =
+  (module: binaryen.Module) =>
+  (index: number) =>
+  (value: binaryen.ExpressionRef) =>
+    module.local.tee(index, value, binaryen.i32);
+
 export const addExpr =
   (module: binaryen.Module) =>
   (left: binaryen.ExpressionRef) =>

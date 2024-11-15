@@ -1,6 +1,5 @@
 module Brainfuck.Optimizer where
 
-import Data.Tuple.Nested (type (/\), (/\))
 import Prelude
 
 import Brainfuck.IR (IR, Offset, RightValue(..), Statement(..))
@@ -14,6 +13,8 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Set (Set)
 import Data.Set as Set
+import Data.Tuple.Nested (type (/\), (/\))
+import Debug (trace)
 
 {----------
 Composition
@@ -143,6 +144,20 @@ composite st1 st2 = case st1 of
     MovePointer right2 -> Just $ MovePointer (addOpt right1 right2)
     _ -> Nothing
   _ -> Nothing
+
+-- | Move 命令をなるべく前に寄せる (こうすると tee 最適化が効きやすい！)
+movePointerForward :: IR -> IR
+movePointerForward ir = case ir of
+  List.Nil -> List.Nil
+  st : sts ->
+    let
+      forwarded = movePointerForward sts
+    in
+      case forwarded of
+        MovePointer right : xs -> case switches st (MovePointer right) of
+          Just (MovePointer right' /\ st') -> MovePointer right' : st' : xs
+          _ -> st : MovePointer right : xs
+        _ -> st : forwarded
 
 -- | IR の最初に Statement を合成
 consIR :: Statement -> IR -> IR
@@ -439,6 +454,7 @@ optimizeOrphanIR ir =
     # ignoreAll -- 無視できる部分を無視する
     # (\ir' -> evalState (eval ir') Map.empty)
     # compositeAll -- 合成可能な部分を合成する
+    # movePointerForward
 
 optimize :: Int -> IR -> IR
 optimize n ir = optimizeAllLoop ir
@@ -446,3 +462,4 @@ optimize n ir = optimizeAllLoop ir
   # ignoreAll -- 無視できる部分を無視する
   # (\ir' -> evalState (eval ir') (Map.fromFoldable $ map (\i -> i /\ 0) $ (0 .. n)))
   # compositeAll -- 合成可能な部分を合成する
+  # movePointerForward
