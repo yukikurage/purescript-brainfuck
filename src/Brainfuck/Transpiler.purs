@@ -30,13 +30,13 @@ transpile = map opToStatement
   where
   opToStatement :: AST.Operation -> IR.Statement
   opToStatement = case _ of
-    AST.Decrement -> IR.Assignment 0 (IR.Sub (IR.FromMemory 0) (IR.Constant 1))
-    AST.Increment -> IR.Assignment 0 (IR.Add (IR.FromMemory 0) (IR.Constant 1))
+    AST.Decrement -> IR.Addition 0 (IR.Constant (-1))
+    AST.Increment -> IR.Addition 0 (IR.Constant 1)
     AST.MoveLeft -> IR.MovePointer (IR.Constant (-1))
     AST.MoveRight -> IR.MovePointer (IR.Constant 1)
     AST.Input -> IR.Input 0
     AST.Output -> IR.Output (IR.FromMemory 0)
-    AST.Loop body -> IR.Loop (transpile body)
+    AST.Loop isOptimize body -> IR.Loop isOptimize (transpile body)
 
 -- transpile :: Int -> Int -> AST -> IR
 -- transpile lookahead cellCount ast =

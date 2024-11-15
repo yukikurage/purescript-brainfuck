@@ -30,9 +30,16 @@ parse code = evalState go 0
       Just '<' -> (AST.MoveLeft : _) <$> go
       Just '.' -> (AST.Output : _) <$> go
       Just ',' -> (AST.Input : _) <$> go
+      Just '$' -> do
+        char' <- popChar
+        case char' of
+          Just '[' -> do
+            body <- go
+            (AST.Loop false body : _) <$> go
+          _ -> go
       Just '[' -> do
         body <- go
-        (AST.Loop body : _) <$> go
+        (AST.Loop true body : _) <$> go
       Just ']' -> pure mempty
       Just _ -> go
       Nothing -> pure mempty

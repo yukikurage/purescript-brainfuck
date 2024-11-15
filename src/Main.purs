@@ -5,12 +5,12 @@ import Prelude
 import Brainfuck.Binaryen (WasmCellSize, cell0)
 import Brainfuck.Compiler (compile)
 import Brainfuck.IR (showIR, viewIR)
+import Brainfuck.Optimizer (optimize)
 import Brainfuck.Parser (parse)
 import Brainfuck.Runtime (runBinary)
 import Brainfuck.Transpiler (transpile)
 import Data.Array (index)
 import Data.DateTime.Instant (unInstant)
-import Data.Foldable (for_)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (CodePoint, codePointAt, codePointFromChar, fromCodePointArray)
 import Effect (Effect)
@@ -62,15 +62,22 @@ main = launchAff_ do
       log $ "Transpiling..."
       Milliseconds beforeTranspile <- unInstant <$> liftEffect now
       let
-        ir = transpile {- 10000 config.cellCount -}  ast
+        ir = transpile ast
       Milliseconds afterTranspile <- unInstant <$> liftEffect now
       log "Transpiled"
 
-      log $ viewIR ir
+      log $ "Optimizing..."
+      Milliseconds beforeOptimize <- unInstant <$> liftEffect now
+      let
+        ir' = optimize 3000 ir
+      Milliseconds afterOptimize <- unInstant <$> liftEffect now
+      log "Optimizing"
+
+      log $ viewIR ir'
 
       log "Compiling..."
       Milliseconds beforeCompile <- unInstant <$> liftEffect now
-      binary <- liftEffect $ compile { cellSize: config.cellSize, importModule: config.importModule, inputFunction: config.inputFunction, outputFunction: config.outputFunction, mainFunction: config.mainFunction } ir
+      binary <- liftEffect $ compile { cellSize: config.cellSize, importModule: config.importModule, inputFunction: config.inputFunction, outputFunction: config.outputFunction, mainFunction: config.mainFunction } ir'
       Milliseconds afterCompile <- unInstant <$> liftEffect now
       log "Compiled"
 
@@ -103,6 +110,7 @@ main = launchAff_ do
 
       log $ "Parse time: " <> show (afterParse - beforeParse)
       log $ "Transpile time: " <> show (afterTranspile - beforeTranspile)
+      log $ "Optimize time: " <> show (afterOptimize - beforeOptimize)
       log $ "Compile time: " <> show (afterCompile - beforeCompile)
       log $ "Run time: " <> show (afterRun - beforeRun)
       log ""

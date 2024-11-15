@@ -12,6 +12,7 @@ foreign import data WasmCellSize :: Type
 
 foreign import newModule :: Effect WasmModule
 foreign import setMemory :: WasmModule -> Int -> Int -> Effect Unit
+foreign import addMemoryExport :: WasmModule -> String -> Effect Unit
 
 foreign import nopExpr :: WasmModule -> WasmExpr
 

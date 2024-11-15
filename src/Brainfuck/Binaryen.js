@@ -2,6 +2,7 @@
 import binaryen from "binaryen";
 export const newModule = () => new binaryen.Module();
 export const setMemory = (module) => (initial) => (maximum) => () => module.setMemory(initial, maximum);
+export const addMemoryExport = (module) => (name) => () => module.addMemoryExport("0", name);
 export const nopExpr = (module) => module.nop();
 export const constExpr = (module) => (value) => module.i32.const(value);
 export const localGet = (module) => (index) => module.local.get(index, binaryen.i32);

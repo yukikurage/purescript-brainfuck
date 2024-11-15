@@ -13,7 +13,7 @@ data Operation
   | MoveLeft
   | Output
   | Input
-  | Loop AST
+  | Loop Boolean AST -- 最適化を適用するか
 
 derive instance genericOperation :: Generic Operation _
 

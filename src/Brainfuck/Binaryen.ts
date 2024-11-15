@@ -8,6 +8,10 @@ export const setMemory =
   (module: binaryen.Module) => (initial: number) => (maximum: number) => () =>
     module.setMemory(initial, maximum);
 
+export const addMemoryExport =
+  (module: binaryen.Module) => (name: string) => () =>
+    module.addMemoryExport("0", name);
+
 export const nopExpr = (module: binaryen.Module) => module.nop();
 
 export const constExpr = (module: binaryen.Module) => (value: number) =>
