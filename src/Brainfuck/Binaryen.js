@@ -31,6 +31,7 @@ export const storeExpr = (module) => (cellSize) => (ptr) => (offset) => (value) 
     return storeByAlign(offset, align, ptr, value);
 };
 export const callExpr = (module) => (name) => (params) => (resultType) => module.call(name, params, resultType);
+export const dropExpr = (module) => (expr) => module.drop(expr);
 export const i32Type = binaryen.i32;
 export const noneType = binaryen.none;
 export const createType = (params) => binaryen.createType(params);
@@ -53,6 +54,7 @@ export const optimize = (module) => () => module.optimize();
 export const optimizeFunction = (module) => (name) => () => module.optimizeFunction(name);
 export const validate = (module) => () => module.validate();
 export const emitBinary = (module) => () => module.emitBinary();
+export const binaryToBuffer = (binary) => () => Buffer.from(binary.buffer);
 export const emitText = (module) => () => module.emitText();
 export const setOptimizeLevel = (module) => (level) => () => setOptimizeLevel(module)(level);
 export const setShrinkLevel = (module) => (level) => () => setShrinkLevel(module)(level);

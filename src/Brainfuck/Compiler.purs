@@ -2,7 +2,7 @@ module Brainfuck.Compiler where
 
 import Prelude
 
-import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, blockExpr, brExpr, callExpr, constExpr, divExpr, emitBinary, i32Type, ifExpr, loadExpr, localGet, localSet, localTee, loopExpr, mulExpr, newModule, noneType, optimize, returnExpr, setMemory, setStart, storeExpr, subExpr, validate)
+import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, addMemoryExport, blockExpr, brExpr, callExpr, cell0, cell2, constExpr, createType, divExpr, dropExpr, emitBinary, i32Type, ifExpr, loadExpr, localGet, localSet, localTee, loopExpr, mulExpr, newModule, noneType, optimize, returnExpr, setMemory, storeExpr, subExpr, validate)
 import Brainfuck.IR (IR, Offset, RightValue(..), Statement(..))
 import Control.Monad.Rec.Class (tailRecM)
 import Control.Monad.Rec.Class as Rec
@@ -89,16 +89,13 @@ optTee = case _ of
 
 compile
   :: { cellSize :: WasmCellSize
-     , importModule :: String
-     , inputFunction :: String
-     , outputFunction :: String
-     , mainFunction :: String
      }
   -> IR
   -> Effect WasmBinary
-compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } ir = do
+compile { cellSize } ir = do
   mod <- newModule
   setMemory mod 4 4
+  addMemoryExport mod "memory"
 
   let
     constE :: Int -> WasmExpr
@@ -151,10 +148,29 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
       | otherwise = storeExpr mod cellSize (addE (teePointerE (addE (localGet mod 0) diff)) (constE offset)) 0 value
 
     outputE :: WasmExpr -> WasmExpr
-    outputE expr = callExpr mod outputFunction [ expr ] noneType
+    -- outputE expr = callExpr mod outputFunction [ expr ] noneType
+    outputE expr = blockExpr mod
+      [ storeExpr mod cell0 (constExpr mod 16) 0 expr
+      , dropExpr mod
+          ( callExpr mod "fd_write"
+              [ constE 1 -- stdout
+              , constE 0 -- iov へのポインタ
+              , constE 1 -- iov の長さ
+              , constE 20 -- 適当な位置 (出力長だが使わない)
+              ]
+              i32Type
+          )
+      ]
 
-    inputE :: Unit -> WasmExpr
-    inputE _ = callExpr mod inputFunction [ constE 0 ] i32Type
+    inputE :: Int -> WasmExpr
+    -- inputE _ = callExpr mod inputFunction [ constE 0 ] i32Type
+    inputE offset = blockExpr mod
+      [ storeExpr mod cell2 (constExpr mod 8) 0 (addE (getPointerE unit) (constE offset)) -- Pointer を保存
+      , dropExpr mod (callExpr mod "fd_read" [ constE 0, constE 8, constE 1, constE 20 ] i32Type)
+      , ifE
+          (subE (loadExpr mod cell2 (constExpr mod 20) 0) (constE 1))
+          (storeMemoryE offset (constE 0))
+      ]
 
     loopE :: String -> WasmExpr -> WasmExpr
     loopE label body = loopExpr mod label body
@@ -208,27 +224,36 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
             pure $ ifE (compileRightValue cond) (blockE tExp')
           OutputT right -> pure $ outputE (compileRightValue right)
           MovePointerT right -> pure $ movePointerE (compileRightValue right)
-          InputT offset -> pure $ storeMemoryE offset (inputE unit)
+          InputT offset -> pure (inputE offset)
         -- t <- go label ir'
         -- pure $ h List.: t
         pure $ Rec.Loop (ir' /\ (acc <> List.singleton h))
 
   let exprs = evalState (go "label" (optTee $ irToIrT ir)) 0
 
-  addFunctionImport mod "output" importModule outputFunction i32Type noneType
-  addFunctionImport mod "input" importModule inputFunction i32Type i32Type
+  -- (import "wasi_snapshot_preview1" "fd_write" (func $fd_write (param i32 i32 i32 i32) (result i32)))
+  addFunctionImport mod "fd_write" "wasi_snapshot_preview1" "fd_write" (createType [ i32Type, i32Type, i32Type, i32Type ]) i32Type
+  -- (import "wasi_snapshot_preview1" "fd_read" (func $fd_read (param i32 i32 i32) (result i32)))
+  addFunctionImport mod "fd_read" "wasi_snapshot_preview1" "fd_read" (createType [ i32Type, i32Type, i32Type, i32Type ]) i32Type
 
   addFunction mod "main"
     noneType
     noneType
     [ i32Type {- Pointer -} ]
-    (blockE (List.singleton (localSet mod 0 (constE 1024)) <> exprs <> List.singleton (returnExpr mod))) -- 1024 までずらしている 0 ~ 128 あたりは自由に使って OK！ (fd_write とかで使う)
+    ( blockE
+        ( List.fromFoldable
+            [ localSet mod 0 (constE 1024)
+            , storeExpr mod cell2 (constExpr mod 0) 0 (constExpr mod 16) -- output 用のポインタ
+            , storeExpr mod cell2 (constExpr mod 4) 0 (constExpr mod 1) -- output の長さ 1 バイト
+            , storeExpr mod cell2 (constExpr mod 8) 0 (constExpr mod 0) -- input 用のポインタ
+            , storeExpr mod cell2 (constExpr mod 12) 0 (constExpr mod 1) -- input の長さ 1 バイト
+            ] <> exprs <> List.singleton (returnExpr mod)
+        )
+    ) -- 1024 までずらしている 0 ~ 128 あたりは自由に使って OK！ (fd_write とかで使う)
 
-  addFunctionExport mod "main" mainFunction
-  setStart mod "main"
+  addFunctionExport mod "main" "_start"
 
-  -- fd_write 用
-  -- setMemory mod 0
+  -- setStart mod "main"
 
   validate mod
   optimize mod

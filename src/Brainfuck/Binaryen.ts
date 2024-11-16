@@ -96,6 +96,10 @@ export const callExpr =
   (resultType: binaryen.Type) =>
     module.call(name, params, resultType);
 
+export const dropExpr =
+  (module: binaryen.Module) => (expr: binaryen.ExpressionRef) =>
+    module.drop(expr);
+
 export const i32Type = binaryen.i32;
 
 export const noneType = binaryen.none;
@@ -180,6 +184,9 @@ export const validate = (module: binaryen.Module) => () => module.validate();
 
 export const emitBinary = (module: binaryen.Module) => () =>
   module.emitBinary();
+
+export const binaryToBuffer = (binary: Uint8Array) => () =>
+  Buffer.from(binary.buffer);
 
 export const emitText = (module: binaryen.Module) => () => module.emitText();
 

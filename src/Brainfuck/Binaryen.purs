@@ -3,6 +3,7 @@ module Brainfuck.Binaryen where
 import Prelude
 
 import Effect (Effect)
+import Node.Buffer (Buffer)
 
 foreign import data WasmBinary :: Type
 foreign import data WasmExpr :: Type
@@ -28,6 +29,7 @@ foreign import divExpr :: WasmModule -> WasmExpr -> WasmExpr -> WasmExpr
 foreign import loadExpr :: WasmModule -> WasmCellSize -> WasmExpr -> Int -> WasmExpr
 foreign import storeExpr :: WasmModule -> WasmCellSize -> WasmExpr -> Int -> WasmExpr -> WasmExpr
 foreign import callExpr :: WasmModule -> String -> Array WasmExpr -> WasmType -> WasmExpr
+foreign import dropExpr :: WasmModule -> WasmExpr -> WasmExpr
 
 foreign import i32Type :: WasmType
 foreign import noneType :: WasmType
@@ -87,3 +89,5 @@ foreign import setOptimizeLevel :: WasmModule -> Int -> Effect Unit
 foreign import setShrinkLevel :: WasmModule -> Int -> Effect Unit
 
 foreign import emitStackIR :: WasmModule -> Effect String
+
+foreign import binaryToBuffer :: WasmBinary -> Effect Buffer

@@ -3,29 +3,18 @@ module Brainfuck.Runtime where
 import Prelude
 
 import Brainfuck.Binaryen (WasmBinary)
-import Data.String (CodePoint)
+import Control.Promise (Promise, toAffE)
 import Effect (Effect)
+import Effect.Aff (Aff)
 
 foreign import data WasmInstance :: Type
 
 foreign import newInstance
-  :: String
-  -> String
-  -> String
-  -> Effect CodePoint
-  -> (CodePoint -> Effect Unit)
-  -> WasmBinary
-  -> Effect WasmInstance
+  :: WasmBinary
+  -> Effect (Promise Unit)
 
 runBinary
-  :: { importModule :: String
-     , inputFunction :: String
-     , outputFunction :: String
-     , mainFunction :: String
-     }
-  -> Effect CodePoint
-  -> (CodePoint -> Effect Unit)
-  -> WasmBinary
-  -> Effect Unit
-runBinary { importModule, inputFunction, outputFunction, mainFunction } input output binary = do
-  void $ newInstance importModule inputFunction outputFunction input output binary
+  :: WasmBinary
+  -> Aff Unit
+runBinary binary = do
+  toAffE $ newInstance binary
