@@ -14,6 +14,3 @@ export const newInstance =
         [`${outputName}`]: (str) => output(str)(),
       },
     });
-
-export const runInstance = (instance) => (mainName) => () =>
-  instance.exports[`${mainName}`]();

@@ -17,9 +17,6 @@ foreign import newInstance
   -> WasmBinary
   -> Effect WasmInstance
 
-foreign import runInstance
-  :: WasmInstance -> String -> Effect Unit
-
 runBinary
   :: { importModule :: String
      , inputFunction :: String
@@ -31,5 +28,4 @@ runBinary
   -> WasmBinary
   -> Effect Unit
 runBinary { importModule, inputFunction, outputFunction, mainFunction } input output binary = do
-  inst <- newInstance importModule inputFunction outputFunction input output binary
-  runInstance inst mainFunction
+  void $ newInstance importModule inputFunction outputFunction input output binary

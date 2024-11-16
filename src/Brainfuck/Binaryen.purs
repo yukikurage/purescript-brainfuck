@@ -31,6 +31,7 @@ foreign import callExpr :: WasmModule -> String -> Array WasmExpr -> WasmType ->
 
 foreign import i32Type :: WasmType
 foreign import noneType :: WasmType
+foreign import createType :: Array WasmType -> WasmType
 
 foreign import ifExpr :: WasmModule -> WasmExpr -> WasmExpr -> WasmExpr
 foreign import blockExpr :: WasmModule -> Array WasmExpr -> WasmExpr
@@ -67,6 +68,11 @@ foreign import addFunctionExport
   :: WasmModule
   -> String -- Internal name
   -> String -- External name
+  -> Effect Unit
+
+foreign import setStart
+  :: WasmModule
+  -> String -- Function name
   -> Effect Unit
 
 foreign import optimize :: WasmModule -> Effect Unit

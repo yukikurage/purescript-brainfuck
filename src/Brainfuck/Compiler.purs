@@ -2,16 +2,16 @@ module Brainfuck.Compiler where
 
 import Prelude
 
-import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, addMemoryExport, blockExpr, brExpr, callExpr, constExpr, divExpr, emitBinary, emitText, i32Type, ifExpr, loadExpr, localGet, localSet, localTee, loopExpr, mulExpr, newModule, noneType, nopExpr, optimize, returnExpr, setMemory, setOptimizeLevel, storeExpr, subExpr, validate)
+import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, blockExpr, brExpr, callExpr, constExpr, divExpr, emitBinary, i32Type, ifExpr, loadExpr, localGet, localSet, localTee, loopExpr, mulExpr, newModule, noneType, optimize, returnExpr, setMemory, setStart, storeExpr, subExpr, validate)
 import Brainfuck.IR (IR, Offset, RightValue(..), Statement(..))
+import Control.Monad.Rec.Class (tailRecM)
+import Control.Monad.Rec.Class as Rec
 import Control.Monad.State (State, evalState, get, modify_)
 import Data.List (List, (:))
 import Data.List as List
 import Data.Maybe (Maybe(..))
 import Data.Tuple.Nested ((/\))
-import Debug (trace)
 import Effect (Effect)
-import Effect.Console (log)
 
 -- | Compile 最適化用
 -- | pointer set の後に pointer get をする時、 tee を呼ぶ
@@ -99,12 +99,8 @@ compile
 compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } ir = do
   mod <- newModule
   setMemory mod 4 4
-  addMemoryExport mod "memory"
 
   let
-    nopE :: Unit -> WasmExpr
-    nopE _ = nopExpr mod
-
     constE :: Int -> WasmExpr
     constE = constExpr mod
 
@@ -189,8 +185,8 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
       FromMemoryTee diff offset -> loadMemoryTeeE (compileRightValue diff) offset
 
     go :: String -> IRT -> State Int (List WasmExpr)
-    go label = case _ of
-      List.Nil -> pure mempty
+    go label initIRT = flip tailRecM (initIRT /\ mempty) \(irt /\ acc) -> case irt of
+      List.Nil -> pure $ Rec.Done acc
       st List.: ir' -> do
         h <- case st of
           AdditionT offset (MulT (ConstantT (-1)) right) -> pure $ storeMemoryE offset (subE (loadMemoryE offset) (compileRightValue right))
@@ -213,8 +209,9 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
           OutputT right -> pure $ outputE (compileRightValue right)
           MovePointerT right -> pure $ movePointerE (compileRightValue right)
           InputT offset -> pure $ storeMemoryE offset (inputE unit)
-        t <- go label ir'
-        pure $ h List.: t
+        -- t <- go label ir'
+        -- pure $ h List.: t
+        pure $ Rec.Loop (ir' /\ (acc <> List.singleton h))
 
   let exprs = evalState (go "label" (optTee $ irToIrT ir)) 0
 
@@ -225,9 +222,13 @@ compile { cellSize, importModule, inputFunction, outputFunction, mainFunction } 
     noneType
     noneType
     [ i32Type {- Pointer -} ]
-    (blockE (List.singleton (localSet mod 0 (constE 1024)) <> exprs <> List.singleton (returnExpr mod)))
+    (blockE (List.singleton (localSet mod 0 (constE 1024)) <> exprs <> List.singleton (returnExpr mod))) -- 1024 までずらしている 0 ~ 128 あたりは自由に使って OK！ (fd_write とかで使う)
 
   addFunctionExport mod "main" mainFunction
+  setStart mod "main"
+
+  -- fd_write 用
+  -- setMemory mod 0
 
   validate mod
   optimize mod

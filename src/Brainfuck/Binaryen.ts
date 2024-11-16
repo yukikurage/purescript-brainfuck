@@ -100,6 +100,9 @@ export const i32Type = binaryen.i32;
 
 export const noneType = binaryen.none;
 
+export const createType = (params: [binaryen.Type]) =>
+  binaryen.createType(params);
+
 export const ifExpr =
   (module: binaryen.Module) =>
   (condition: binaryen.ExpressionRef) =>
@@ -161,6 +164,9 @@ export const addFunction =
   (body: binaryen.ExpressionRef) =>
   () =>
     module.addFunction(name, params, results, locals, body);
+
+export const setStart = (module: binaryen.Module) => (name: string) => () =>
+  module.setStart(module.getFunction(name));
 
 // Optimizations & Compilation
 

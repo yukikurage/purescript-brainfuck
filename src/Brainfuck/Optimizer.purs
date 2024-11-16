@@ -14,7 +14,6 @@ import Data.Maybe (Maybe(..))
 import Data.Set (Set)
 import Data.Set as Set
 import Data.Tuple.Nested (type (/\), (/\))
-import Debug (trace)
 
 {----------
 Composition
@@ -246,6 +245,8 @@ optimizeLoop body =
     --  rv が Constant 0 のときは、If 文に最適化できる
     --   body を、val が 0 のときは実行しない、val が 0 以外のときは実行する
     --  rv が Constant 0 以外のときは適当に実行
+    --
+    -- あとから気づいたけど if 分に最適化するときは内部で依存関係があっても大丈夫だな
 
     onlyAssignOrAddition = not
       ( isMayHappen
@@ -266,18 +267,18 @@ optimizeLoop body =
   in
     case position0Statement of
       Nothing -> List.fromFoldable [ Loop true optimizedBody ] -- 最適化できない
-      Just st | onlyAssignOrAddition && noInternalReferences optimizedBody -> case st of
+      Just st | onlyAssignOrAddition -> case st of
         Assignment 0 (Constant 0) ->
           List.fromFoldable [ If (FromMemory 0) optimizedBody ] --　If 文に最適化
         Assignment 0 _ -> List.fromFoldable [ Loop true optimizedBody ]
-        Addition 0 (Constant (-1)) ->
+        Addition 0 (Constant (-1)) | noInternalReferences optimizedBody ->
           List.mapMaybe
             ( case _ of
                 Addition 0 _ -> Nothing
                 s -> repeatStatement s (FromMemory 0)
             )
             optimizedBody <> List.fromFoldable [ Assignment 0 (Constant 0) ]
-        Addition 0 right ->
+        Addition 0 right | noInternalReferences optimizedBody ->
           List.mapMaybe
             ( case _ of
                 Addition 0 _ -> Nothing
@@ -384,6 +385,8 @@ moveOffset offset = do
     mapKeys f m = Map.fromFoldable $ Map.values $ mapWithIndex (\k v -> f k /\ v) m
   modify_ (mapKeys (_ + offset))
 
+-- 計算実行時に影響を受ける可能性のある
+
 -- 計算を進めて　 [ ] を実際の値に変換する
 -- ループの中は再起的に実行しない
 eval :: IR -> State (Map Offset Int) IR
@@ -417,6 +420,7 @@ eval = case _ of
         (Addition offset sbst : _) <$> eval xs
   Loop isOpt ir : xs -> do
     removeAllKnown
+    addKnown 0 0
     (Loop isOpt ir : _) <$> eval xs
   If cond ir : xs -> do
     cond' <- tryEval cond
@@ -454,12 +458,15 @@ optimizeOrphanIR ir =
     # ignoreAll -- 無視できる部分を無視する
     # (\ir' -> evalState (eval ir') Map.empty)
     # compositeAll -- 合成可能な部分を合成する
+    # ignoreAll -- 無視できる部分を無視する
     # movePointerForward
 
 optimize :: Int -> IR -> IR
-optimize n ir = optimizeAllLoop ir
-  # compositeAll -- 合成可能な部分を合成する
-  # ignoreAll -- 無視できる部分を無視する
-  # (\ir' -> evalState (eval ir') (Map.fromFoldable $ map (\i -> i /\ 0) $ (0 .. n)))
-  # compositeAll -- 合成可能な部分を合成する
-  # movePointerForward
+optimize n ir =
+  optimizeAllLoop ir
+    # compositeAll -- 合成可能な部分を合成する
+    # ignoreAll -- 無視できる部分を無視する
+    # (\ir' -> evalState (eval ir') (Map.fromFoldable $ map (\i -> i /\ 0) $ (0 .. n)))
+    # compositeAll -- 合成可能な部分を合成する
+    # ignoreAll -- 無視できる部分を無視する
+    # movePointerForward
