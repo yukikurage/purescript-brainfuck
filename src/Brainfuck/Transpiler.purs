@@ -35,7 +35,7 @@ transpile = map opToStatement
     AST.MoveLeft -> IR.MovePointer (IR.Constant (-1))
     AST.MoveRight -> IR.MovePointer (IR.Constant 1)
     AST.Input -> IR.Input 0
-    AST.Output -> IR.Output (IR.FromMemory 0)
+    AST.Output -> IR.Output 0
     AST.Loop isOptimize body -> IR.Loop isOptimize (transpile body)
 
 -- transpile :: Int -> Int -> AST -> IR

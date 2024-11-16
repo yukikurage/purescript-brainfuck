@@ -3,7 +3,7 @@ module Brainfuck.Compiler where
 import Prelude
 
 import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, addMemoryExport, blockExpr, brExpr, callExpr, cell0, cell2, constExpr, createType, divExpr, dropExpr, emitBinary, i32Type, ifExpr, loadExpr, localGet, localSet, localTee, loopExpr, mulExpr, newModule, noneType, optimize, returnExpr, setMemory, storeExpr, subExpr, validate)
-import Brainfuck.IR (IR, Offset, RightValue(..), Statement(..))
+import Brainfuck.IR (IR, RightValue(..), Statement(..), Offset)
 import Control.Monad.Rec.Class (tailRecM)
 import Control.Monad.Rec.Class as Rec
 import Control.Monad.State (State, evalState, get, modify_)
@@ -43,7 +43,8 @@ data StatementT
       RightValueT
   | LoopT Boolean IRT -- Loop until the break called
   | IfT RightValueT IRT -- If the value is not zero, execute the IR
-  | OutputT RightValueT
+  | OutputT Offset
+  | OutputTee RightValueT Offset
   | MovePointerT RightValueT
   | InputT Offset
 
@@ -64,7 +65,7 @@ irToIrT = map case _ of
   Addition offset right -> AdditionT offset (rvToRvT right)
   Loop b ir -> LoopT b (irToIrT ir)
   If cond tExp -> IfT (rvToRvT cond) (irToIrT tExp)
-  Output right -> OutputT (rvToRvT right)
+  Output offset -> OutputT offset
   MovePointer right -> MovePointerT (rvToRvT right)
   Input offset -> InputT offset
 
@@ -74,7 +75,7 @@ modifyTee diff = case _ of
   AssignmentT offset right -> Just $ AssignmentTee diff offset right
   AdditionT offset right -> Just $ AdditionTee diff offset right
   IfT (FromMemoryT offset) ir -> Just $ IfT (FromMemoryTee diff offset) ir
-  OutputT (FromMemoryT offset) -> Just $ OutputT (FromMemoryTee diff offset)
+  OutputT offset -> Just $ OutputTee diff offset
   _ -> Nothing
 
 optTee :: IRT -> IRT
@@ -147,10 +148,25 @@ compile { cellSize } ir = do
       | offset >= 0 = storeExpr mod cellSize (teePointerE (addE (localGet mod 0) diff)) offset value
       | otherwise = storeExpr mod cellSize (addE (teePointerE (addE (localGet mod 0) diff)) (constE offset)) 0 value
 
-    outputE :: WasmExpr -> WasmExpr
+    outputE :: Int -> WasmExpr
     -- outputE expr = callExpr mod outputFunction [ expr ] noneType
-    outputE expr = blockExpr mod
-      [ storeExpr mod cell0 (constExpr mod 16) 0 expr
+    outputE offset = blockExpr mod
+      [ storeExpr mod cell2 (constExpr mod 0) 0 (addE (getPointerE unit) (constE offset)) -- Pointer を保存
+      , dropExpr mod
+          ( callExpr mod "fd_write"
+              [ constE 1 -- stdout
+              , constE 0 -- iov へのポインタ
+              , constE 1 -- iov の長さ
+              , constE 20 -- 適当な位置 (出力長だが使わない)
+              ]
+              i32Type
+          )
+      ]
+
+    outputTeeE :: WasmExpr -> Int -> WasmExpr
+    -- outputE expr = callExpr mod outputFunction [ expr ] noneType
+    outputTeeE diff offset = blockExpr mod
+      [ storeExpr mod cell2 (constExpr mod 0) 0 (addE (teePointerE (addE (localGet mod 0) diff)) (constE offset)) -- Pointer を保存
       , dropExpr mod
           ( callExpr mod "fd_write"
               [ constE 1 -- stdout
@@ -222,7 +238,8 @@ compile { cellSize } ir = do
           IfT cond tExp -> do
             tExp' <- go label tExp
             pure $ ifE (compileRightValue cond) (blockE tExp')
-          OutputT right -> pure $ outputE (compileRightValue right)
+          OutputT offset -> pure $ outputE offset
+          OutputTee diff offset -> pure $ outputTeeE (compileRightValue diff) offset
           MovePointerT right -> pure $ movePointerE (compileRightValue right)
           InputT offset -> pure (inputE offset)
         -- t <- go label ir'

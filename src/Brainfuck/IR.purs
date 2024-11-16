@@ -37,7 +37,7 @@ data Statement
   | Addition Offset RightValue
   | Loop Boolean IR -- Loop until the break called
   | If RightValue IR -- If the value is not zero, execute the IR
-  | Output RightValue
+  | Output Offset
   | MovePointer RightValue
   | Input Offset
 

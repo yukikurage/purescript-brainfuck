@@ -46,7 +46,7 @@ addOffsetToStatement offset = case _ of
   Addition offset' right -> Addition (offset + offset') (addOffsetToVariables offset right)
   Loop isOpt ir -> Loop isOpt (map (addOffsetToStatement offset) ir)
   If cond tExp -> If (addOffsetToVariables offset cond) (map (addOffsetToStatement offset) tExp)
-  Output right -> Output (addOffsetToVariables offset right)
+  Output offset' -> Output (offset + offset')
   MovePointer right -> MovePointer (addOffsetToVariables offset right)
   Input offset' -> Input (offset + offset')
 
@@ -64,7 +64,7 @@ switches st1 st2 = case st1 of
           && not (Set.member offset1 (variables right2))
           && not (Set.member offset2 (variables right1)) -> Just $ st2 /\ st1
     MovePointer (Constant p) -> Just $ st2 /\ addOffsetToStatement (-p) st1
-    Output right2 | not (Set.member offset1 (variables right2)) -> Just $ st2 /\ st1
+    Output offset2 | offset1 /= offset2 -> Just $ st2 /\ st1
     _ -> Nothing
   Addition offset1 right1 -> case st2 of
     Assignment offset2 right2
@@ -76,17 +76,17 @@ switches st1 st2 = case st1 of
           && not (Set.member offset1 (variables right2))
           && not (Set.member offset2 (variables right1)) -> Just $ st2 /\ st1
     MovePointer (Constant p) -> Just $ st2 /\ addOffsetToStatement (-p) st1
-    Output right2 | not (Set.member offset1 (variables right2)) -> Just $ st2 /\ st1
+    Output offset2 | offset1 /= offset2 -> Just $ st2 /\ st1
     _ -> Nothing
   MovePointer (Constant p) -> case st2 of
     MovePointer _ -> Nothing -- MovePointer 同士は交換できないが、合成可能
     Loop _ _ -> Nothing -- Loop は常に Pointer 位置の参照をして分岐するため、入れ替えると死ぬ
     _ -> Just $ addOffsetToStatement p st2 /\ st1 -- それ以外の命令ないら適当に入れ替えて OK!
-  Output right1 -> case st2 of
+  Output offset1 -> case st2 of
     Assignment offset2 _
-      | not (Set.member offset2 (variables right1)) -> Just $ st2 /\ st1
+      | offset1 /= offset2 -> Just $ st2 /\ st1
     Addition offset2 _
-      | not (Set.member offset2 (variables right1)) -> Just $ st2 /\ st1
+      | offset1 /= offset2 -> Just $ st2 /\ st1
     _ -> Nothing
   _ -> Nothing
 
@@ -216,7 +216,7 @@ variablesInIR ir = case ir of
   Addition _ right : xs -> Set.union (variables right) (variablesInIR xs)
   Loop _ ir' : xs -> Set.union (variablesInIR ir') (variablesInIR xs)
   If cond ir' : xs -> Set.union (variables cond) (Set.union (variablesInIR ir') (variablesInIR xs))
-  Output right : xs -> Set.union (variables right) (variablesInIR xs)
+  Output offset : xs -> variablesInIR xs
   MovePointer right : xs -> Set.union (variables right) (variablesInIR xs)
   Input _ : xs -> variablesInIR xs
 
@@ -431,9 +431,8 @@ eval = case _ of
         removeAllKnown
         cond'' <- substRightValue cond
         (If cond'' ir : _) <$> eval xs
-  Output right : xs -> do
-    sbst <- simpRightValue <$> substRightValue right
-    (Output sbst : _) <$> eval xs
+  Output offset : xs -> do
+    (Output offset : _) <$> eval xs
   MovePointer right : xs -> do
     pm <- tryEval right
     case pm of
