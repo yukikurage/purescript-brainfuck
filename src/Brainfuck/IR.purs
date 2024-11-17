@@ -17,6 +17,8 @@ data RightValue
   | Mul RightValue RightValue
   | Div RightValue RightValue
 
+derive instance Eq RightValue
+
 derive instance Generic RightValue _
 
 instance Show RightValue where

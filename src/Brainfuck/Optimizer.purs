@@ -13,6 +13,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Set (Set)
 import Data.Set as Set
+import Data.Traversable (for_)
 import Data.Tuple.Nested (type (/\), (/\))
 
 {----------
@@ -144,19 +145,14 @@ composite st1 st2 = case st1 of
     _ -> Nothing
   _ -> Nothing
 
--- | Move 命令をなるべく前に寄せる (こうすると tee 最適化が効きやすい！)
-movePointerForward :: IR -> IR
-movePointerForward ir = case ir of
+movePointerBackward :: IR -> IR
+movePointerBackward ir = case ir of
   List.Nil -> List.Nil
-  st : sts ->
-    let
-      forwarded = movePointerForward sts
-    in
-      case forwarded of
-        MovePointer right : xs -> case switches st (MovePointer right) of
-          Just (MovePointer right' /\ st') -> MovePointer right' : st' : xs
-          _ -> st : MovePointer right : xs
-        _ -> st : forwarded
+  MovePointer right : st : sts ->
+    case switches (MovePointer right) st of
+      Just (st' /\ MovePointer right') -> st' : movePointerBackward (MovePointer right' : sts)
+      _ -> MovePointer right : movePointerBackward (st : sts)
+  st : sts -> st : movePointerBackward sts
 
 -- | IR の最初に Statement を合成
 consIR :: Statement -> IR -> IR
@@ -205,8 +201,8 @@ assignedOffsets ir = case ir of
   List.Nil -> Set.empty
   Assignment offset _ : xs -> Set.insert offset (assignedOffsets xs)
   Addition offset _ : xs -> Set.insert offset (assignedOffsets xs)
-  Loop _ ir' : xs -> Set.union (assignedOffsets ir') (assignedOffsets xs)
-  If _ ir' : xs -> Set.union (assignedOffsets ir') (assignedOffsets xs)
+  Loop _ ir' : xs -> Set.union (assignedOffsets ir') (assignedOffsets xs) -- Pointer が動かない事前提
+  If _ ir' : xs -> Set.union (assignedOffsets ir') (assignedOffsets xs) -- Pointer が動かない事前提
   _ : xs -> assignedOffsets xs
 
 variablesInIR :: IR -> Set Offset
@@ -216,7 +212,7 @@ variablesInIR ir = case ir of
   Addition _ right : xs -> Set.union (variables right) (variablesInIR xs)
   Loop _ ir' : xs -> Set.union (variablesInIR ir') (variablesInIR xs)
   If cond ir' : xs -> Set.union (variables cond) (Set.union (variablesInIR ir') (variablesInIR xs))
-  Output offset : xs -> variablesInIR xs
+  Output _ : xs -> variablesInIR xs
   MovePointer right : xs -> Set.union (variables right) (variablesInIR xs)
   Input _ : xs -> variablesInIR xs
 
@@ -419,9 +415,23 @@ eval = case _ of
         sbst <- simpRightValue <$> substRightValue right
         (Addition offset sbst : _) <$> eval xs
   Loop isOpt ir : xs -> do
-    removeAllKnown
-    addKnown 0 0
-    (Loop isOpt ir : _) <$> eval xs
+    known <- getKnown 0
+    case known of
+      Just 0 -> eval xs
+      _ -> do
+        if
+          ( not
+              ( isMayHappen case _ of
+                  MovePointer _ -> true
+                  _ -> false
+              )
+              ir
+          ) then
+          for_ (assignedOffsets ir) \offset -> removeKnown offset
+        else
+          removeAllKnown
+        addKnown 0 0
+        (Loop isOpt ir : _) <$> eval xs
   If cond ir : xs -> do
     cond' <- tryEval cond
     case cond' of
@@ -458,7 +468,7 @@ optimizeOrphanIR ir =
     # (\ir' -> evalState (eval ir') Map.empty)
     # compositeAll -- 合成可能な部分を合成する
     # ignoreAll -- 無視できる部分を無視する
-    # movePointerForward
+    # movePointerBackward
 
 optimize :: Int -> IR -> IR
 optimize n ir =
@@ -468,4 +478,4 @@ optimize n ir =
     # (\ir' -> evalState (eval ir') (Map.fromFoldable $ map (\i -> i /\ 0) $ (0 .. n)))
     # compositeAll -- 合成可能な部分を合成する
     # ignoreAll -- 無視できる部分を無視する
-    # movePointerForward
+    # movePointerBackward

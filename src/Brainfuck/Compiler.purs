@@ -2,8 +2,8 @@ module Brainfuck.Compiler where
 
 import Prelude
 
-import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, addMemoryExport, blockExpr, brExpr, callExpr, cell0, cell2, constExpr, createType, divExpr, dropExpr, emitBinary, i32Type, ifExpr, loadExpr, localGet, localSet, localTee, loopExpr, mulExpr, newModule, noneType, optimize, returnExpr, setMemory, storeExpr, subExpr, validate)
-import Brainfuck.IR (IR, RightValue(..), Statement(..), Offset)
+import Brainfuck.Binaryen (WasmBinary, WasmCellSize, WasmExpr, addExpr, addFunction, addFunctionExport, addFunctionImport, addMemoryExport, blockExpr, brExpr, callExpr, cell2, constExpr, createType, divExpr, dropExpr, emitBinary, i32Type, ifExpr, loadExpr, localGet, localSet, localTee, loopExpr, mulExpr, newModule, noneType, optimize, returnExpr, setMemory, storeExpr, subExpr, validate)
+import Brainfuck.IR (IR, Offset, RightValue(..), Statement(..))
 import Control.Monad.Rec.Class (tailRecM)
 import Control.Monad.Rec.Class as Rec
 import Control.Monad.State (State, evalState, get, modify_)
@@ -26,6 +26,8 @@ data RightValueT
       RightValueT -- Pointer をどれだけ動かすかが埋め込まれる
       Offset
 
+derive instance Eq RightValueT
+
 data StatementT
   -- Assignment n, Addition n, Substraction n の RightValue には FromMemory n が入っていないことが保証されていなければならない
   -- これによって合成が容易になる
@@ -42,6 +44,7 @@ data StatementT
       Offset
       RightValueT
   | LoopT Boolean IRT -- Loop until the break called
+  | LoopTee RightValueT Boolean IRT -- move n; loop {... ; move n} というループは Loop 内の if 分で tee できる
   | IfT RightValueT IRT -- If the value is not zero, execute the IR
   | OutputT Offset
   | OutputTee RightValueT Offset
@@ -74,8 +77,11 @@ modifyTee :: RightValueT -> StatementT -> Maybe StatementT
 modifyTee diff = case _ of
   AssignmentT offset right -> Just $ AssignmentTee diff offset right
   AdditionT offset right -> Just $ AdditionTee diff offset right
-  IfT (FromMemoryT offset) ir -> Just $ IfT (FromMemoryTee diff offset) ir
+  IfT (FromMemoryT offset) ir -> Just $ IfT (FromMemoryTee diff offset) (optTee ir)
   OutputT offset -> Just $ OutputTee diff offset
+  LoopT b ir
+    | Just { init, last: MovePointerT diff2 } <- List.unsnoc ir
+    , diff == diff2 -> Just $ LoopTee diff b (optTee init)
   _ -> Nothing
 
 optTee :: IRT -> IRT
@@ -235,6 +241,14 @@ compile { cellSize } ir = do
                   (loadMemoryE 0)
                   (blockE (bodyE <> List.singleton (brE label')))
               )
+          LoopTee diff _ body -> do
+            label' <- mkLabel
+            bodyE <- go label' body
+            pure $ loopE label'
+              ( ifE
+                  (loadMemoryTeeE (compileRightValue diff) 0)
+                  (blockE (bodyE <> List.singleton (brE label')))
+              )
           IfT cond tExp -> do
             tExp' <- go label tExp
             pure $ ifE (compileRightValue cond) (blockE tExp')
@@ -271,6 +285,8 @@ compile { cellSize } ir = do
   addFunctionExport mod "main" "_start"
 
   -- setStart mod "main"
+
+  -- log =<< emitText mod
 
   validate mod
   optimize mod

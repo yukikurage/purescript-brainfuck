@@ -68,6 +68,8 @@ main = launchAff_ do
       Milliseconds afterOptimize <- unInstant <$> liftEffect now
       log "Optimizing"
 
+      -- log $ viewIR ir'
+
       log "Compiling..."
       Milliseconds beforeCompile <- unInstant <$> liftEffect now
       binary <- liftEffect $
