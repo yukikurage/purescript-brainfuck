@@ -9,6 +9,8 @@ package:
     - node-fs
     - node-process
     - node-streams
+    - optparse
+    - pathy
     - prelude
     - strings
     - transformers

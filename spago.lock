@@ -13,6 +13,8 @@
             "node-fs",
             "node-process",
             "node-streams",
+            "optparse",
+            "pathy",
             "prelude",
             "strings",
             "transformers"
@@ -23,6 +25,7 @@
             "arraybuffer-types",
             "arrays",
             "bifunctors",
+            "catenable-lists",
             "console",
             "const",
             "contravariant",
@@ -35,9 +38,11 @@
             "enums",
             "exceptions",
             "exists",
+            "exitcodes",
             "foldable-traversable",
             "foreign",
             "foreign-object",
+            "free",
             "functions",
             "functors",
             "gen",
@@ -59,10 +64,13 @@
             "now",
             "nullable",
             "numbers",
+            "open-memoize",
+            "optparse",
             "ordered-collections",
             "orders",
             "parallel",
             "partial",
+            "pathy",
             "posix-types",
             "prelude",
             "profunctor",
@@ -675,6 +683,20 @@
         "tuples"
       ]
     },
+    "catenable-lists": {
+      "type": "registry",
+      "version": "7.0.0",
+      "integrity": "sha256-76vYENhwF4BWTBsjeLuErCH2jqVT4M3R1HX+4RwSftA=",
+      "dependencies": [
+        "control",
+        "foldable-traversable",
+        "lists",
+        "maybe",
+        "prelude",
+        "tuples",
+        "unfoldable"
+      ]
+    },
     "console": {
       "type": "registry",
       "version": "6.1.0",
@@ -814,6 +836,14 @@
         "unsafe-coerce"
       ]
     },
+    "exitcodes": {
+      "type": "registry",
+      "version": "4.0.0",
+      "integrity": "sha256-4wxViTbyOoyKJ/WaRGI6+hZmgMKI5Miv16lSwefiLSM=",
+      "dependencies": [
+        "enums"
+      ]
+    },
     "foldable-traversable": {
       "type": "registry",
       "version": "6.0.0",
@@ -865,6 +895,27 @@
         "tuples",
         "typelevel-prelude",
         "unfoldable"
+      ]
+    },
+    "free": {
+      "type": "registry",
+      "version": "7.1.0",
+      "integrity": "sha256-JAumgEsGSzJCNLD8AaFvuX7CpqS5yruCngi6yI7+V5k=",
+      "dependencies": [
+        "catenable-lists",
+        "control",
+        "distributive",
+        "either",
+        "exists",
+        "foldable-traversable",
+        "invariant",
+        "lazy",
+        "maybe",
+        "prelude",
+        "tailrec",
+        "transformers",
+        "tuples",
+        "unsafe-coerce"
       ]
     },
     "functions": {
@@ -1136,6 +1187,59 @@
         "maybe"
       ]
     },
+    "open-memoize": {
+      "type": "registry",
+      "version": "6.2.0",
+      "integrity": "sha256-p1m7wF3aHQ80yUvqMs20OTMl496WS6YpKlmI2Nkg9j0=",
+      "dependencies": [
+        "either",
+        "integers",
+        "lazy",
+        "lists",
+        "maybe",
+        "partial",
+        "prelude",
+        "strings",
+        "tuples"
+      ]
+    },
+    "optparse": {
+      "type": "registry",
+      "version": "5.0.1",
+      "integrity": "sha256-cEzEkNW4q0gZlXl4z0zn+H2vs6l2UAp7NPHCsois73k=",
+      "dependencies": [
+        "aff",
+        "arrays",
+        "bifunctors",
+        "console",
+        "control",
+        "effect",
+        "either",
+        "enums",
+        "exists",
+        "exitcodes",
+        "foldable-traversable",
+        "free",
+        "gen",
+        "integers",
+        "lazy",
+        "lists",
+        "maybe",
+        "newtype",
+        "node-buffer",
+        "node-process",
+        "node-streams",
+        "nonempty",
+        "numbers",
+        "open-memoize",
+        "partial",
+        "prelude",
+        "strings",
+        "tailrec",
+        "transformers",
+        "tuples"
+      ]
+    },
     "ordered-collections": {
       "type": "registry",
       "version": "3.2.0",
@@ -1186,6 +1290,22 @@
       "version": "4.0.0",
       "integrity": "sha256-fwXerld6Xw1VkReh8yeQsdtLVrjfGiVuC5bA1Wyo/J4=",
       "dependencies": []
+    },
+    "pathy": {
+      "type": "registry",
+      "version": "9.0.0",
+      "integrity": "sha256-5l4vLKFYv7TdDqyS8Rm67OYFJI2WB7w/Ve3vC9dMM1o=",
+      "dependencies": [
+        "console",
+        "exceptions",
+        "lists",
+        "partial",
+        "profunctor",
+        "strings",
+        "transformers",
+        "typelevel-prelude",
+        "unsafe-coerce"
+      ]
     },
     "posix-types": {
       "type": "registry",

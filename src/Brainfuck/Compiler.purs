@@ -96,10 +96,11 @@ optTee = case _ of
 
 compile
   :: { cellSize :: WasmCellSize
+     , noBinaryenOptimization :: Boolean
      }
   -> IR
   -> Effect WasmBinary
-compile { cellSize } ir = do
+compile { cellSize, noBinaryenOptimization } ir = do
   mod <- newModule
   setMemory mod 4 4
   addMemoryExport mod "memory"
@@ -289,6 +290,6 @@ compile { cellSize } ir = do
   -- log =<< emitText mod
 
   validate mod
-  optimize mod
+  when (not noBinaryenOptimization) $ optimize mod
 
   emitBinary mod

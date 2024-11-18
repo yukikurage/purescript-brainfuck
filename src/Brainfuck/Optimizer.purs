@@ -436,7 +436,19 @@ eval = case _ of
     cond' <- tryEval cond
     case cond' of
       Just 0 -> eval xs
-      Just _ -> (ir <> _) <$> eval xs
+      Just _ -> do
+        if
+          ( not
+              ( isMayHappen case _ of
+                  MovePointer _ -> true
+                  _ -> false
+              )
+              ir
+          ) then
+          for_ (assignedOffsets ir) \offset -> removeKnown offset
+        else
+          removeAllKnown
+        (ir <> _) <$> eval xs
       Nothing -> do
         removeAllKnown
         cond'' <- substRightValue cond
